@@ -44,7 +44,8 @@ class HomeViewModel(
             currentState.copy(
                 isSettingsVisible = true,
                 isAppListVisible = false,
-                isRedZoneSelectionVisible = false
+                isRedZoneSelectionVisible = false,
+                isAddictiveUsageVisible = false
             )
         }
     }
@@ -53,7 +54,8 @@ class HomeViewModel(
         _uiState.update { currentState ->
             currentState.copy(
                 isSettingsVisible = false,
-                isRedZoneSelectionVisible = false
+                isRedZoneSelectionVisible = false,
+                isAddictiveUsageVisible = false
             )
         }
     }
@@ -71,6 +73,23 @@ class HomeViewModel(
     fun hideRedZoneSelection() {
         _uiState.update { currentState ->
             currentState.copy(isRedZoneSelectionVisible = false)
+        }
+    }
+
+    fun showAddictiveUsage() {
+        _uiState.update { currentState ->
+            currentState.copy(
+                isSettingsVisible = true,
+                isAddictiveUsageVisible = true,
+                isRedZoneSelectionVisible = false,
+                isAppListVisible = false
+            )
+        }
+    }
+
+    fun hideAddictiveUsage() {
+        _uiState.update { currentState ->
+            currentState.copy(isAddictiveUsageVisible = false)
         }
     }
 

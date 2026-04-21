@@ -58,10 +58,14 @@ fun HomeScreen(
     val swipeThreshold = with(LocalDensity.current) { 72.dp.toPx() }
 
     BackHandler(
-        enabled = uiState.isAppListVisible || uiState.isSettingsVisible || uiState.isRedZoneSelectionVisible
+        enabled = uiState.isAppListVisible ||
+            uiState.isSettingsVisible ||
+            uiState.isRedZoneSelectionVisible ||
+            uiState.isAddictiveUsageVisible
     ) {
         when {
             uiState.isAppListVisible -> viewModel.hideAppList()
+            uiState.isAddictiveUsageVisible -> viewModel.hideAddictiveUsage()
             uiState.isRedZoneSelectionVisible -> viewModel.hideRedZoneSelection()
             uiState.isSettingsVisible -> viewModel.hideSettings()
         }
@@ -145,7 +149,9 @@ fun HomeScreen(
                 swipeThreshold = swipeThreshold,
                 onDismiss = viewModel::hideSettings,
                 onOpenRedZone = viewModel::showRedZoneSelection,
+                onOpenAddictiveUsage = viewModel::showAddictiveUsage,
                 onBackFromRedZone = viewModel::hideRedZoneSelection,
+                onBackFromAddictiveUsage = viewModel::hideAddictiveUsage,
                 onToggleRedZoneApp = viewModel::toggleRedZoneApp
             )
         }
@@ -201,7 +207,9 @@ private fun SettingsOverlay(
     swipeThreshold: Float,
     onDismiss: () -> Unit,
     onOpenRedZone: () -> Unit,
+    onOpenAddictiveUsage: () -> Unit,
     onBackFromRedZone: () -> Unit,
+    onBackFromAddictiveUsage: () -> Unit,
     onToggleRedZoneApp: (String) -> Unit
 ) {
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -209,7 +217,7 @@ private fun SettingsOverlay(
         app.label.contains(searchQuery.trim(), ignoreCase = true)
     }
 
-    LaunchedEffect(uiState.isRedZoneSelectionVisible) {
+    LaunchedEffect(uiState.isRedZoneSelectionVisible, uiState.isAddictiveUsageVisible) {
         if (!uiState.isRedZoneSelectionVisible) {
             searchQuery = ""
         }
@@ -228,6 +236,8 @@ private fun SettingsOverlay(
                         if (totalDrag >= swipeThreshold) {
                             if (uiState.isRedZoneSelectionVisible) {
                                 onBackFromRedZone()
+                            } else if (uiState.isAddictiveUsageVisible) {
+                                onBackFromAddictiveUsage()
                             } else {
                                 onDismiss()
                             }
@@ -241,16 +251,22 @@ private fun SettingsOverlay(
             .padding(horizontal = 24.dp, vertical = 40.dp)
     ) {
         Text(
-            text = if (uiState.isRedZoneSelectionVisible) "RedZone" else "Configuracoes",
+            text = when {
+                uiState.isRedZoneSelectionVisible -> "RedZone"
+                uiState.isAddictiveUsageVisible -> "Tempo de uso de Apps adquitivos"
+                else -> "Configuracoes"
+            },
             color = Color.White,
             fontSize = 28.sp,
             fontWeight = FontWeight.SemiBold
         )
         Text(
-            text = if (uiState.isRedZoneSelectionVisible) {
-                "Escolha os apps que devem ser rotulados como RedZone"
-            } else {
-                "Arraste para a direita para voltar"
+            text = when {
+                uiState.isRedZoneSelectionVisible ->
+                    "Escolha os apps que devem ser rotulados como RedZone"
+                uiState.isAddictiveUsageVisible ->
+                    "Aqui vamos acompanhar o tempo de uso dos apps adquitivos"
+                else -> "Arraste para a direita para voltar"
             },
             modifier = Modifier.padding(top = 8.dp),
             color = Color.White.copy(alpha = 0.6f),
@@ -322,12 +338,31 @@ private fun SettingsOverlay(
                     }
                 }
             }
+        } else if (uiState.isAddictiveUsageVisible) {
+            SettingsStaticCard(
+                title = "Tempo de uso dos apps adquitivos",
+                description = "Esta area vai mostrar quanto tempo os apps adquitivos estao sendo usados ao longo do dia."
+            )
+            SettingsStaticCard(
+                title = "Base para a proxima etapa",
+                description = if (uiState.redZonePackageNames.isEmpty()) {
+                    "Nenhum app foi marcado na RedZone ainda. Quando voce selecionar apps na RedZone, eles poderao ser usados aqui."
+                } else {
+                    "${uiState.redZonePackageNames.size} app(s) ja estao marcados na RedZone e poderao alimentar esse painel futuramente."
+                }
+            )
         } else {
             SettingsOptionRow(
                 title = "1. RedZone",
                 description = "Escolha a lista de apps que o usuario quer parar de usar.",
                 trailingText = "${uiState.redZonePackageNames.size} selecionado(s)",
                 onClick = onOpenRedZone
+            )
+            SettingsOptionRow(
+                title = "2. Tempo de uso de Apps adquitivos",
+                description = "Area reservada para acompanhar o tempo gasto nos apps mais adquitivos.",
+                trailingText = "Em breve",
+                onClick = onOpenAddictiveUsage
             )
         }
     }
@@ -363,6 +398,35 @@ private fun SettingsOptionRow(
                 fontSize = 13.sp
             )
         }
+        Text(
+            text = description,
+            modifier = Modifier.padding(top = 6.dp),
+            color = Color.White.copy(alpha = 0.68f),
+            fontSize = 14.sp
+        )
+        HorizontalDivider(
+            modifier = Modifier.padding(top = 14.dp),
+            color = Color.White.copy(alpha = 0.08f)
+        )
+    }
+}
+
+@Composable
+private fun SettingsStaticCard(
+    title: String,
+    description: String
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 14.dp)
+    ) {
+        Text(
+            text = title,
+            color = Color.White,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Medium
+        )
         Text(
             text = description,
             modifier = Modifier.padding(top = 6.dp),

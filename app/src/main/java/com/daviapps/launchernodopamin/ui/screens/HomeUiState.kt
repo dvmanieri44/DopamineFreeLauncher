@@ -10,5 +10,6 @@ data class HomeUiState(
     val isAppListVisible: Boolean = false,
     val isSettingsVisible: Boolean = false,
     val isRedZoneSelectionVisible: Boolean = false,
+    val isAddictiveUsageVisible: Boolean = false,
     val redZonePackageNames: Set<String> = emptySet()
 )
