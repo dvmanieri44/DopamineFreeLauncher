@@ -75,7 +75,6 @@ fun HomeScreen(
     val limitedRedZoneCount = uiState.redZoneConfigs.values.count { config ->
         config.timeLimitMinutes != null
     }
-
     DisposableEffect(lifecycleOwner, viewModel) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -299,6 +298,25 @@ private fun SettingsOverlay(
     val limitedRedZoneCount = uiState.redZoneConfigs.values.count { config ->
         config.timeLimitMinutes != null
     }
+    val screenTitle = when {
+        uiState.isRedZoneSelectionVisible -> "RedZone"
+        uiState.isAddictiveUsageVisible -> "Tempo de uso"
+        else -> "Configurações"
+    }
+    val screenSubtitle = when {
+        uiState.isRedZoneSelectionVisible ->
+            "Defina quais apps precisam de fricção e limite diário."
+        uiState.isAddictiveUsageVisible ->
+            "Acompanhe o comportamento dos apps que mais puxam sua atenção."
+        else -> "Ajustes rápidos para manter o launcher intencional."
+    }
+    val onBackOrClose = {
+        when {
+            uiState.isRedZoneSelectionVisible -> onBackFromRedZone()
+            uiState.isAddictiveUsageVisible -> onBackFromAddictiveUsage()
+            else -> onDismiss()
+        }
+    }
 
     LaunchedEffect(uiState.isRedZoneSelectionVisible, uiState.isAddictiveUsageVisible) {
         if (!uiState.isRedZoneSelectionVisible) {
@@ -309,21 +327,15 @@ private fun SettingsOverlay(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF101010))
-            .pointerInput(uiState.isRedZoneSelectionVisible) {
+            .background(Color(0xFF080808))
+            .pointerInput(uiState.isRedZoneSelectionVisible, uiState.isAddictiveUsageVisible) {
                 var totalDrag = 0f
                 detectHorizontalDragGestures(
                     onDragStart = { totalDrag = 0f },
                     onHorizontalDrag = { _, dragAmount ->
                         totalDrag += dragAmount
                         if (totalDrag >= swipeThreshold) {
-                            if (uiState.isRedZoneSelectionVisible) {
-                                onBackFromRedZone()
-                            } else if (uiState.isAddictiveUsageVisible) {
-                                onBackFromAddictiveUsage()
-                            } else {
-                                onDismiss()
-                            }
+                            onBackOrClose()
                             totalDrag = 0f
                         }
                     },
@@ -331,90 +343,68 @@ private fun SettingsOverlay(
                     onDragCancel = { totalDrag = 0f }
                 )
             }
-            .padding(horizontal = 24.dp, vertical = 40.dp)
+            .padding(horizontal = 20.dp, vertical = 34.dp)
     ) {
-        Text(
-            text = when {
-                uiState.isRedZoneSelectionVisible -> "RedZone"
-                uiState.isAddictiveUsageVisible -> "Tempo de uso de apps viciantes"
-                else -> "Configurações"
+        SettingsHeader(
+            title = screenTitle,
+            subtitle = screenSubtitle,
+            actionLabel = if (
+                uiState.isRedZoneSelectionVisible ||
+                uiState.isAddictiveUsageVisible
+            ) {
+                "Voltar"
+            } else {
+                "Fechar"
             },
-            color = Color.White,
-            fontSize = 28.sp,
-            fontWeight = FontWeight.SemiBold
+            onAction = onBackOrClose
         )
-        Text(
-            text = when {
-                uiState.isRedZoneSelectionVisible ->
-                    "Escolha os apps que devem ser rotulados como RedZone"
-                uiState.isAddictiveUsageVisible ->
-                    "Aqui vamos acompanhar o tempo de uso dos apps viciantes"
-                else -> "Arraste para a direita para voltar"
-            },
-            modifier = Modifier.padding(top = 8.dp),
-            color = Color.White.copy(alpha = 0.6f),
-            fontSize = 14.sp
-        )
-        Spacer(modifier = Modifier.size(28.dp))
+        Spacer(modifier = Modifier.size(22.dp))
 
         if (uiState.isRedZoneSelectionVisible) {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                placeholder = {
-                    Text(
-                        text = "Pesquisar apps para a RedZone",
-                        color = Color.White.copy(alpha = 0.45f)
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                item {
+                    SettingsSearchField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = "Pesquisar apps para a RedZone"
                     )
-                },
-                colors = fieldColors()
-            )
-
-            Spacer(modifier = Modifier.size(12.dp))
-            Text(
-                text = "${uiState.redZonePackageNames.size} app(s) marcados",
-                color = Color.White.copy(alpha = 0.68f),
-                fontSize = 13.sp
-            )
-            Spacer(modifier = Modifier.size(16.dp))
-            RedZoneEnforcementCard(
-                uiState = uiState,
-                limitedRedZoneCount = limitedRedZoneCount,
-                onOpenUsageAccessSettings = onOpenUsageAccessSettings,
-                onOpenAccessibilitySettings = onOpenAccessibilitySettings
-            )
-            Spacer(modifier = Modifier.size(12.dp))
-            HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
-
-            when {
-                uiState.isLoadingApps -> {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.align(Alignment.Center),
-                            color = Color.White
-                        )
-                    }
+                }
+                item {
+                    RedZoneStatsRow(
+                        selectedCount = uiState.redZonePackageNames.size,
+                        limitedCount = limitedRedZoneCount
+                    )
+                }
+                item {
+                    RedZoneEnforcementCard(
+                        uiState = uiState,
+                        limitedRedZoneCount = limitedRedZoneCount,
+                        onOpenUsageAccessSettings = onOpenUsageAccessSettings,
+                        onOpenAccessibilitySettings = onOpenAccessibilitySettings
+                    )
                 }
 
-                filteredApps.isEmpty() -> {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        Text(
-                            text = "Nenhum app corresponde a essa pesquisa",
-                            modifier = Modifier.align(Alignment.Center),
-                            color = Color.White.copy(alpha = 0.82f),
-                            fontSize = 18.sp,
-                            textAlign = TextAlign.Center
-                        )
+                when {
+                    uiState.isLoadingApps -> {
+                        item {
+                            LoadingSettingsState(text = "Carregando apps instalados")
+                        }
                     }
-                }
 
-                else -> {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(vertical = 12.dp)
-                    ) {
+                    filteredApps.isEmpty() -> {
+                        item {
+                            EmptySettingsState(text = "Nenhum app corresponde a essa pesquisa")
+                        }
+                    }
+
+                    else -> {
+                        item {
+                            SettingsSectionLabel(text = "Apps instalados")
+                        }
                         items(
                             items = filteredApps,
                             key = { app -> app.packageName }
@@ -433,37 +423,64 @@ private fun SettingsOverlay(
                 }
             }
         } else if (uiState.isAddictiveUsageVisible) {
-            SettingsStaticCard(
-                title = "Tempo de uso dos apps viciantes",
-                description = "Esta área vai mostrar quanto tempo os apps viciantes estão sendo usados ao longo do dia."
-            )
-            SettingsStaticCard(
-                title = "Base para a próxima etapa",
-                description = if (uiState.redZonePackageNames.isEmpty()) {
-                    "Nenhum app foi marcado na RedZone ainda. Quando você selecionar apps na RedZone, eles poderão ser usados aqui."
-                } else {
-                    "${uiState.redZonePackageNames.size} app(s) já estão marcados na RedZone e poderão alimentar esse painel futuramente."
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                item {
+                    SettingsStaticCard(
+                        title = "Tempo de uso dos apps viciantes",
+                        description = "Esta área vai mostrar quanto tempo os apps viciantes estão sendo usados ao longo do dia."
+                    )
                 }
-            )
+                item {
+                    SettingsStaticCard(
+                        title = "Base para a próxima etapa",
+                        description = if (uiState.redZonePackageNames.isEmpty()) {
+                            "Nenhum app foi marcado na RedZone ainda. Quando você selecionar apps na RedZone, eles poderão ser usados aqui."
+                        } else {
+                            "${uiState.redZonePackageNames.size} app(s) já estão marcados na RedZone e poderão alimentar esse painel futuramente."
+                        }
+                    )
+                }
+            }
         } else {
-            SettingsOptionRow(
-                title = "1. RedZone",
-                description = "Escolha a lista de apps que o usuario quer parar de usar.",
-                trailingText = "${uiState.redZonePackageNames.size} selecionado(s)",
-                onClick = onOpenRedZone
-            )
-            SettingsOptionRow(
-                title = "2. Tempo de uso de apps viciantes",
-                description = "Área reservada para acompanhar o tempo gasto nos apps mais viciantes.",
-                trailingText = "Em breve",
-                onClick = onOpenAddictiveUsage
-            )
-            RedZoneEnforcementCard(
-                uiState = uiState,
-                limitedRedZoneCount = limitedRedZoneCount,
-                onOpenUsageAccessSettings = onOpenUsageAccessSettings,
-                onOpenAccessibilitySettings = onOpenAccessibilitySettings
-            )
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                item {
+                    RedZoneEnforcementCard(
+                        uiState = uiState,
+                        limitedRedZoneCount = limitedRedZoneCount,
+                        onOpenUsageAccessSettings = onOpenUsageAccessSettings,
+                        onOpenAccessibilitySettings = onOpenAccessibilitySettings
+                    )
+                }
+                item {
+                    SettingsSectionLabel(text = "Ferramentas")
+                }
+                item {
+                    SettingsOptionRow(
+                        title = "RedZone",
+                        description = "Escolha apps para limitar e reduzir uso impulsivo.",
+                        trailingText = "${uiState.redZonePackageNames.size} apps",
+                        detailText = "$limitedRedZoneCount com limite",
+                        onClick = onOpenRedZone
+                    )
+                }
+                item {
+                    SettingsOptionRow(
+                        title = "Tempo de uso",
+                        description = "Área reservada para acompanhar os padrões de uso.",
+                        trailingText = "Em breve",
+                        detailText = "Leitura diária",
+                        onClick = onOpenAddictiveUsage
+                    )
+                }
+            }
         }
     }
 
@@ -481,17 +498,204 @@ private fun SettingsOverlay(
 }
 
 @Composable
+private fun SettingsHeader(
+    title: String,
+    subtitle: String,
+    actionLabel: String,
+    onAction: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                color = Color.White,
+                fontSize = 30.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = subtitle,
+                modifier = Modifier.padding(top = 8.dp),
+                color = Color.White.copy(alpha = 0.62f),
+                fontSize = 14.sp,
+                lineHeight = 20.sp
+            )
+        }
+        TextButton(
+            onClick = onAction,
+            modifier = Modifier
+                .padding(start = 12.dp)
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.14f),
+                    shape = RoundedCornerShape(16.dp)
+                )
+        ) {
+            Text(
+                text = actionLabel,
+                color = Color.White.copy(alpha = 0.86f),
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsSearchField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                color = Color.White.copy(alpha = 0.035f),
+                shape = RoundedCornerShape(18.dp)
+            ),
+        singleLine = true,
+        placeholder = {
+            Text(
+                text = placeholder,
+                color = Color.White.copy(alpha = 0.45f)
+            )
+        },
+        colors = fieldColors()
+    )
+}
+
+@Composable
+private fun SettingsSectionLabel(text: String) {
+    Text(
+        text = text,
+        color = Color.White.copy(alpha = 0.48f),
+        fontSize = 12.sp,
+        fontWeight = FontWeight.SemiBold
+    )
+}
+
+@Composable
+private fun RedZoneStatsRow(
+    selectedCount: Int,
+    limitedCount: Int
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        SettingsMetric(
+            label = "Na RedZone",
+            value = selectedCount.toString(),
+            modifier = Modifier.weight(1f)
+        )
+        SettingsMetric(
+            label = "Com limite",
+            value = limitedCount.toString(),
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun SettingsMetric(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .background(
+                color = Color.White.copy(alpha = 0.045f),
+                shape = RoundedCornerShape(18.dp)
+            )
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(18.dp)
+            )
+            .padding(horizontal = 16.dp, vertical = 14.dp)
+    ) {
+        Text(
+            text = value,
+            color = Color.White,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            text = label,
+            modifier = Modifier.padding(top = 4.dp),
+            color = Color.White.copy(alpha = 0.58f),
+            fontSize = 12.sp
+        )
+    }
+}
+
+@Composable
+private fun LoadingSettingsState(text: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 36.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        CircularProgressIndicator(color = Color.White)
+        Text(
+            text = text,
+            color = Color.White.copy(alpha = 0.62f),
+            fontSize = 14.sp
+        )
+    }
+}
+
+@Composable
+private fun EmptySettingsState(text: String) {
+    Text(
+        text = text,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                color = Color.White.copy(alpha = 0.035f),
+                shape = RoundedCornerShape(18.dp)
+            )
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(18.dp)
+            )
+            .padding(horizontal = 18.dp, vertical = 24.dp),
+        color = Color.White.copy(alpha = 0.76f),
+        fontSize = 15.sp,
+        textAlign = TextAlign.Center
+    )
+}
+
+@Composable
 private fun SettingsOptionRow(
     title: String,
     description: String,
     trailingText: String,
+    detailText: String,
     onClick: () -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .background(
+                color = Color.White.copy(alpha = 0.045f),
+                shape = RoundedCornerShape(20.dp)
+            )
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.09f),
+                shape = RoundedCornerShape(20.dp)
+            )
             .clickable(onClick = onClick)
-            .padding(vertical = 14.dp)
+            .padding(horizontal = 18.dp, vertical = 18.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -506,19 +710,29 @@ private fun SettingsOptionRow(
             )
             Text(
                 text = trailingText,
-                color = Color.White.copy(alpha = 0.65f),
-                fontSize = 13.sp
+                modifier = Modifier
+                    .background(
+                        color = Color.White.copy(alpha = 0.08f),
+                        shape = RoundedCornerShape(999.dp)
+                    )
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                color = Color.White.copy(alpha = 0.82f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
             )
         }
         Text(
             text = description,
-            modifier = Modifier.padding(top = 6.dp),
+            modifier = Modifier.padding(top = 8.dp),
             color = Color.White.copy(alpha = 0.68f),
-            fontSize = 14.sp
+            fontSize = 14.sp,
+            lineHeight = 20.sp
         )
-        HorizontalDivider(
+        Text(
+            text = detailText,
             modifier = Modifier.padding(top = 14.dp),
-            color = Color.White.copy(alpha = 0.08f)
+            color = Color.White.copy(alpha = 0.46f),
+            fontSize = 12.sp
         )
     }
 }
@@ -531,7 +745,16 @@ private fun SettingsStaticCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 14.dp)
+            .background(
+                color = Color.White.copy(alpha = 0.045f),
+                shape = RoundedCornerShape(20.dp)
+            )
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.09f),
+                shape = RoundedCornerShape(20.dp)
+            )
+            .padding(horizontal = 18.dp, vertical = 18.dp)
     ) {
         Text(
             text = title,
@@ -543,11 +766,8 @@ private fun SettingsStaticCard(
             text = description,
             modifier = Modifier.padding(top = 6.dp),
             color = Color.White.copy(alpha = 0.68f),
-            fontSize = 14.sp
-        )
-        HorizontalDivider(
-            modifier = Modifier.padding(top = 14.dp),
-            color = Color.White.copy(alpha = 0.08f)
+            fontSize = 14.sp,
+            lineHeight = 20.sp
         )
     }
 }
@@ -560,6 +780,11 @@ private fun RedZoneEnforcementCard(
     onOpenAccessibilitySettings: () -> Unit
 ) {
     val enforcementState = uiState.redZoneEnforcementState
+    val statusLabel = when {
+        enforcementState.isMonitoringActive && limitedRedZoneCount > 0 -> "Ativo"
+        enforcementState.isMonitoringActive -> "Pronto"
+        else -> "Inativo"
+    }
     val headline = when {
         enforcementState.isMonitoringActive && limitedRedZoneCount > 0 ->
             "Bloqueio automático ativo"
@@ -581,19 +806,41 @@ private fun RedZoneEnforcementCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .background(
+                color = Color.White.copy(alpha = if (enforcementState.isMonitoringActive) 0.06f else 0.035f),
+                shape = RoundedCornerShape(22.dp)
+            )
             .border(
                 width = 1.dp,
-                color = Color.White.copy(alpha = 0.12f),
-                shape = RoundedCornerShape(20.dp)
+                color = Color.White.copy(alpha = if (enforcementState.isMonitoringActive) 0.18f else 0.09f),
+                shape = RoundedCornerShape(22.dp)
             )
             .padding(horizontal = 18.dp, vertical = 18.dp)
     ) {
-        Text(
-            text = headline,
-            color = Color.White,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Medium
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = headline,
+                modifier = Modifier.weight(1f),
+                color = Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = statusLabel,
+                modifier = Modifier
+                    .background(
+                        color = Color.White.copy(alpha = if (enforcementState.isMonitoringActive) 0.14f else 0.07f),
+                        shape = RoundedCornerShape(999.dp)
+                    )
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                color = Color.White.copy(alpha = 0.82f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
         Text(
             text = description,
             modifier = Modifier.padding(top = 8.dp),
@@ -673,8 +920,25 @@ private fun RedZoneAppRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .background(
+                color = if (isSelected) {
+                    Color.White.copy(alpha = 0.065f)
+                } else {
+                    Color.White.copy(alpha = 0.032f)
+                },
+                shape = RoundedCornerShape(18.dp)
+            )
+            .border(
+                width = 1.dp,
+                color = if (isSelected) {
+                    Color.White.copy(alpha = 0.18f)
+                } else {
+                    Color.White.copy(alpha = 0.07f)
+                },
+                shape = RoundedCornerShape(18.dp)
+            )
             .clickable(onClick = onClick)
-            .padding(vertical = 6.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -698,7 +962,6 @@ private fun RedZoneAppRow(
             onCheckedChange = { onClick() }
         )
     }
-    HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
 }
 
 @Composable
@@ -714,12 +977,12 @@ private fun RedZoneLimitDialog(
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             modifier = Modifier.widthIn(max = 360.dp),
-            shape = RoundedCornerShape(28.dp),
-            color = Color.Black,
+            shape = RoundedCornerShape(26.dp),
+            color = Color(0xFF090909),
             contentColor = Color.White,
             border = androidx.compose.foundation.BorderStroke(
                 width = 1.dp,
-                color = Color.White.copy(alpha = 0.22f)
+                color = Color.White.copy(alpha = 0.18f)
             )
         ) {
             Column(
@@ -740,7 +1003,7 @@ private fun RedZoneLimitDialog(
                 )
 
                 Text(
-                    text = "Escolha como esse app deve entrar na RedZone.",
+                    text = "Escolha o limite diário. Sem limitador mantém o app marcado, mas não bloqueia.",
                     color = Color.White.copy(alpha = 0.68f),
                     fontSize = 14.sp,
                     lineHeight = 20.sp
@@ -839,20 +1102,20 @@ private fun RedZoneLimitOptionRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .border(
-                width = 1.dp,
-                color = if (isSelected) {
-                    Color.White.copy(alpha = 0.92f)
-                } else {
-                    Color.White.copy(alpha = 0.12f)
-                },
-                shape = RoundedCornerShape(18.dp)
-            )
             .background(
                 color = if (isSelected) {
                     Color.White.copy(alpha = 0.06f)
                 } else {
-                    Color.Transparent
+                    Color.White.copy(alpha = 0.025f)
+                },
+                shape = RoundedCornerShape(18.dp)
+            )
+            .border(
+                width = 1.dp,
+                color = if (isSelected) {
+                    Color.White.copy(alpha = 0.36f)
+                } else {
+                    Color.White.copy(alpha = 0.12f)
                 },
                 shape = RoundedCornerShape(18.dp)
             )
