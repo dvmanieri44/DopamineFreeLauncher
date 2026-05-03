@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">launcherNoDopamin</string>
+    <string name="red_zone_accessibility_description">Bloqueia apps da RedZone quando o tempo limite for ultrapassado.</string>
 </resources>

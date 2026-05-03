@@ -6,6 +6,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.daviapps.launchernodopamin.data.InstalledAppsRepository
+import com.daviapps.launchernodopamin.data.RedZoneAppConfig
+import com.daviapps.launchernodopamin.data.RedZoneEnforcementRepository
 import com.daviapps.launchernodopamin.data.RedZoneRepository
 import com.daviapps.launchernodopamin.domain.GetCurrentDateUseCase
 import com.daviapps.launchernodopamin.domain.GetCurrentTimeUseCase
@@ -18,6 +20,7 @@ import kotlinx.coroutines.launch
 class HomeViewModel(
     private val installedAppsRepository: InstalledAppsRepository,
     private val redZoneRepository: RedZoneRepository,
+    private val redZoneEnforcementRepository: RedZoneEnforcementRepository,
     private val getCurrentTimeUseCase: GetCurrentTimeUseCase = GetCurrentTimeUseCase(),
     private val getCurrentDateUseCase: GetCurrentDateUseCase = GetCurrentDateUseCase()
 ) : ViewModel() {
@@ -45,7 +48,11 @@ class HomeViewModel(
                 isSettingsVisible = true,
                 isAppListVisible = false,
                 isRedZoneSelectionVisible = false,
-                isAddictiveUsageVisible = false
+                isAddictiveUsageVisible = false,
+                isRedZoneLimitDialogVisible = false,
+                redZoneDialogPackageName = null,
+                redZoneDialogAppLabel = null,
+                redZoneDialogSelectedLimitMinutes = null
             )
         }
     }
@@ -55,7 +62,11 @@ class HomeViewModel(
             currentState.copy(
                 isSettingsVisible = false,
                 isRedZoneSelectionVisible = false,
-                isAddictiveUsageVisible = false
+                isAddictiveUsageVisible = false,
+                isRedZoneLimitDialogVisible = false,
+                redZoneDialogPackageName = null,
+                redZoneDialogAppLabel = null,
+                redZoneDialogSelectedLimitMinutes = null
             )
         }
     }
@@ -65,14 +76,24 @@ class HomeViewModel(
             currentState.copy(
                 isSettingsVisible = true,
                 isRedZoneSelectionVisible = true,
-                isAppListVisible = false
+                isAppListVisible = false,
+                isRedZoneLimitDialogVisible = false,
+                redZoneDialogPackageName = null,
+                redZoneDialogAppLabel = null,
+                redZoneDialogSelectedLimitMinutes = null
             )
         }
     }
 
     fun hideRedZoneSelection() {
         _uiState.update { currentState ->
-            currentState.copy(isRedZoneSelectionVisible = false)
+            currentState.copy(
+                isRedZoneSelectionVisible = false,
+                isRedZoneLimitDialogVisible = false,
+                redZoneDialogPackageName = null,
+                redZoneDialogAppLabel = null,
+                redZoneDialogSelectedLimitMinutes = null
+            )
         }
     }
 
@@ -82,7 +103,11 @@ class HomeViewModel(
                 isSettingsVisible = true,
                 isAddictiveUsageVisible = true,
                 isRedZoneSelectionVisible = false,
-                isAppListVisible = false
+                isAppListVisible = false,
+                isRedZoneLimitDialogVisible = false,
+                redZoneDialogPackageName = null,
+                redZoneDialogAppLabel = null,
+                redZoneDialogSelectedLimitMinutes = null
             )
         }
     }
@@ -93,19 +118,75 @@ class HomeViewModel(
         }
     }
 
-    fun toggleRedZoneApp(packageName: String) {
+    fun showRedZoneLimitDialog(
+        packageName: String,
+        appLabel: String
+    ) {
         _uiState.update { currentState ->
-            val updatedPackages = currentState.redZonePackageNames.toMutableSet().apply {
-                if (contains(packageName)) {
-                    remove(packageName)
-                } else {
-                    add(packageName)
-                }
-            }.toSet()
+            currentState.copy(
+                isRedZoneLimitDialogVisible = true,
+                redZoneDialogPackageName = packageName,
+                redZoneDialogAppLabel = appLabel,
+                redZoneDialogSelectedLimitMinutes =
+                    currentState.redZoneConfigs[packageName]?.timeLimitMinutes
+            )
+        }
+    }
 
-            redZoneRepository.saveSelectedPackageNames(updatedPackages)
+    fun hideRedZoneLimitDialog() {
+        _uiState.update { currentState ->
+            currentState.copy(
+                isRedZoneLimitDialogVisible = false,
+                redZoneDialogPackageName = null,
+                redZoneDialogAppLabel = null,
+                redZoneDialogSelectedLimitMinutes = null
+            )
+        }
+    }
 
-            currentState.copy(redZonePackageNames = updatedPackages)
+    fun selectRedZoneLimit(limitMinutes: Int?) {
+        _uiState.update { currentState ->
+            currentState.copy(redZoneDialogSelectedLimitMinutes = limitMinutes)
+        }
+    }
+
+    fun confirmRedZoneLimitSelection() {
+        val currentState = _uiState.value
+        val packageName = currentState.redZoneDialogPackageName ?: return
+        val updatedConfig = RedZoneAppConfig(
+            packageName = packageName,
+            timeLimitMinutes = currentState.redZoneDialogSelectedLimitMinutes
+        )
+
+        redZoneRepository.saveRedZoneAppConfig(updatedConfig)
+
+        _uiState.update { state ->
+            val updatedConfigs = state.redZoneConfigs + (packageName to updatedConfig)
+            state.copy(
+                redZonePackageNames = updatedConfigs.keys,
+                redZoneConfigs = updatedConfigs,
+                isRedZoneLimitDialogVisible = false,
+                redZoneDialogPackageName = null,
+                redZoneDialogAppLabel = null,
+                redZoneDialogSelectedLimitMinutes = null
+            )
+        }
+    }
+
+    fun removeRedZoneAppFromDialog() {
+        val packageName = _uiState.value.redZoneDialogPackageName ?: return
+        redZoneRepository.removeRedZoneAppConfig(packageName)
+
+        _uiState.update { state ->
+            val updatedConfigs = state.redZoneConfigs - packageName
+            state.copy(
+                redZonePackageNames = updatedConfigs.keys,
+                redZoneConfigs = updatedConfigs,
+                isRedZoneLimitDialogVisible = false,
+                redZoneDialogPackageName = null,
+                redZoneDialogAppLabel = null,
+                redZoneDialogSelectedLimitMinutes = null
+            )
         }
     }
 
@@ -128,16 +209,28 @@ class HomeViewModel(
         }
     }
 
+    fun refreshEnforcementState() {
+        _uiState.update { currentState ->
+            currentState.copy(
+                redZoneEnforcementState = redZoneEnforcementRepository.getEnforcementState()
+            )
+        }
+    }
+
     init {
         loadRedZoneSelection()
+        refreshEnforcementState()
         loadApps()
         startClock()
     }
 
     private fun loadRedZoneSelection() {
+        val redZoneConfigs = redZoneRepository.getRedZoneAppConfigs()
+
         _uiState.update { currentState ->
             currentState.copy(
-                redZonePackageNames = redZoneRepository.getSelectedPackageNames()
+                redZonePackageNames = redZoneConfigs.keys,
+                redZoneConfigs = redZoneConfigs
             )
         }
     }
@@ -172,6 +265,9 @@ class HomeViewModel(
                                 selfPackageName = selfPackageName
                             ),
                             redZoneRepository = RedZoneRepository(
+                                context = context.applicationContext
+                            ),
+                            redZoneEnforcementRepository = RedZoneEnforcementRepository(
                                 context = context.applicationContext
                             )
                         ) as T
