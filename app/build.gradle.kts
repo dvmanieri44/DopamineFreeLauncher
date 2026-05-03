@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.daviapps.launchernodopamin"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.daviapps.launchernodopamin"
